@@ -1,0 +1,6 @@
+Revision history for Perl extension Config::Wild.
+
+0.01  Wed Aug 11 22:58:50 2004
+	- original version; created by h2xs 1.23 with options
+		-A -X -n Config::Wild
+
