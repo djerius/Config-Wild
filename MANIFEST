@@ -13,3 +13,4 @@ t/Config-Wild.t
 t/include.t
 t/vars.t
 t/wildcard.t
+META.yml                                 Module meta-data (added by MakeMaker)
