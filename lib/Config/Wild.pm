@@ -129,7 +129,7 @@ sub load_cmd
       return undef;
     }
 
-    $self->_parsepair( $_ ) or do 
+    $self->_parsepair( $_ ) or do
     {
       $self->_errmsg("load_cmd: can't parse line $_");
       return undef;
@@ -389,6 +389,9 @@ sub _splitpair
   my ( $self, $pair ) = @_;
   my ( $keyword, $value );
 
+  $pair =~ s/^\s+//;
+  $pair =~ s/\s+$//;
+
   return 2 != (($keyword, $value ) = $pair =~ /([^=\s]*)\s*=\s*(.*)/) ?
     () : ( $keyword, $value );
 }
@@ -398,6 +401,9 @@ sub _parsepair
   my ( $self, $pair ) = @_;
 
   my ( $keyword, $value );
+
+  $pair =~ s/^\s+//;
+  $pair =~ s/\s+$//;
 
   return undef
     if 2 != (($keyword, $value ) = $pair =~ /([^=\s]*)\s*=\s*(.*)/);
