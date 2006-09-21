@@ -1,7 +1,10 @@
-Config-Wild version 1.2
-=======================
+			     Config::Wild
+			     ============
+
+NAME
 
 Parse an application configuration file with wildcard keywords
+
 
 INSTALLATION
 
@@ -12,18 +15,29 @@ To install this module type the following:
    make test
    make install
 
+DEPENDENCIES
 
-AUTHOR
-
-Diab Jerius, E<lt>djerius@cpan.orgE<gt>
+None
 
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2004 by the Smithsonian Astrophysical Observatory
+Copyright (C) 1998-2006 Smithsonian Astrophysical Observatory
 
-This software is released under the GNU General Public License.  You
-may find a copy at
+Config::Wild is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
 
-          http://www.fsf.org/copyleft/gpl.html
+Config::Wild is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the 
+      Free Software Foundation, Inc. 
+      51 Franklin Street, Fifth Floor
+      Boston, MA  02110-1301, USA
+
 
 
