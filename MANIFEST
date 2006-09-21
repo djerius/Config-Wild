@@ -5,7 +5,9 @@ cfgs/include2.cnf
 cfgs/test.cnf
 cfgs/vars.cnf
 cfgs/wildcard.cnf
+ChangeLog
 Changes
+COPYING
 lib/Config/Wild.pm
 Makefile.PL
 MANIFEST
