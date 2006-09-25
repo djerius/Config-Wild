@@ -327,7 +327,6 @@ sub _errmsg
 # is set.  Prints a warning if the variable isn't defined (i.e. doesn't
 # exist rather than exists with an undef value) and returns undef.
 #
-# modified from the version in App::Config
 #========================================================================
 
 our $AUTOLOAD;
@@ -377,8 +376,6 @@ sub AUTOLOAD
 sub _expand
 {
     my ( $self, $value ) = @_;
-
-    # Code stolen from App::Config
 
     my $stop = 0;
     until ( $stop )
@@ -711,10 +708,9 @@ may find a copy at
    http://www.fsf.org/copyleft/gpl.html
 
 
-
 =head1 SEE ALSO
 
-B<AppConfig> an early version of which was the inspiration for this
+B<AppConfig>, an early version of which was the inspiration for this
 module.
 
 
