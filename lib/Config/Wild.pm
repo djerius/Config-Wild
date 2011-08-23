@@ -26,15 +26,18 @@ use warnings;
 
 use Carp qw( carp croak );
 use FileHandle;
+use Cwd qw[ getcwd ];
 
-
-our $VERSION = '1.3';
+our $VERSION = '1.4';
 
 
 sub new
 {
     my $this = shift;
     my $class = ref($this) || $this;
+
+    my $attr = ref $_[-1] eq 'HASH' ? pop @_ : {};
+
     my $self = {
 		'wild' => [],	# regular expression keywords
 		'abs' => {},	# absolute keywords
@@ -42,6 +45,8 @@ sub new
 			   UNDEF => undef, # function to call from value when
 					   # keyword not defined
 			   PrintError => 0, # warn() on error
+			   dir => '.',
+			   %$attr,
 			  },
 
 	       };
@@ -72,64 +77,83 @@ sub load
     my %files = ();
     my @files = ( { 'file' => $file, 'pos' => 0 } );
 
-  loop:
-    while ( @files )
+    my $cwd = getcwd;
+    chdir( $self->{attr}{dir} ) or do
     {
-	my $file = $files[0]->{'file'};
-	my $pos  = $files[0]->{'pos'};
+	$self->_errmsg( "load: couldn't change directory to $self->{attr}{dir}");
+	return undef;
+    };
 
-	# if EOF on last file, don't bother with it
-	next if $files[0]->{'pos'} == -1;
+    my $ret = eval {
 
-	my $fh = new FileHandle $file or do
+      loop:
+	while ( @files )
 	{
-	    $self->_errmsg("load: error opening file `$file'");
-	    return undef;
-	};
+	    my $file = $files[0]->{'file'};
+	    my $pos  = $files[0]->{'pos'};
 
-	seek( $fh, $files[0]->{'pos'}, 0 ); 
+	    # if EOF on last file, don't bother with it
+	    next if $files[0]->{'pos'} == -1;
 
-	# loop through file
-	my $line = 0;
-	while ( <$fh> )
-	{
-	    $files[0]->{'pos'} = tell;
-	    $line++;
-
-	    # ignore comment lines or empty lines
-	    next if /^\s*\#|^\s*$/;
-
-	    chomp;
-
-	    if ( /^\s*%include\s+(.*)/ )
+	    my $fh = new FileHandle $file or do
 	    {
-		if ( CORE::exists $files{ $1 } )
+		$self->_errmsg("load: error opening file `$file'");
+		return;
+	    };
+
+	    seek( $fh, $files[0]->{'pos'}, 0 ); 
+
+	    # loop through file
+	    my $line = 0;
+	    while ( <$fh> )
+	    {
+		$files[0]->{'pos'} = tell;
+		$line++;
+
+		# ignore comment lines or empty lines
+		next if /^\s*\#|^\s*$/;
+
+		chomp;
+
+		if ( /^\s*%include\s+(.*)/ )
 		{
-		    $self->_errmsg("load: infinite loop trying to read $1");
-		    return undef;
+		    if ( CORE::exists $files{ $1 } )
+		    {
+			$self->_errmsg("load: infinite loop trying to read $1");
+			return undef;
+		    }
+		    $files{ $1 }++;
+		    unshift @files, { 'file' => $1, 'pos' => 0 };
+		    $fh->close;
+		    redo loop;
 		}
-		$files{ $1 }++;
-		unshift @files, { 'file' => $1, 'pos' => 0 };
-		$fh->close;
-		redo loop;
-	    }
 
-	    $self->_parsepair( $_ ) or do 
-	    {
-		$self->_errmsg("load: $file: can't parse line $line");
-		return undef;
+		$self->_parsepair( $_ ) or do 
+		{
+		    $self->_errmsg("load: $file: can't parse line $line");
+		    return;
+		}
+
 	    }
 
 	}
+	continue
+	{
+	    shift @files;
+	}
 
-    }
-    continue
+
+	return 1;
+    };
+
+    chdir( $cwd ) or do
     {
-	shift @files;
-    }
+	$self->_errmsg( "load: error restoring directory to $cwd");
+	return undef;
+    };
 
-      1;
 
+    return $ret;
 }
 
 sub load_cmd
@@ -444,7 +468,7 @@ Config::Wild - parse an application configuration file with wildcard keywords
 
   use Config::Wild;
   $cfg = Config::Wild->new();
-  $cfg = Config::Wild->new( $configfile );
+  $cfg = Config::Wild->new( $configfile, \%attr );
 
 =head1 DESCRIPTION
 
@@ -535,12 +559,62 @@ the input stream to the specified I<file>.
 
 =item B<new>
 
-  $cfg = Config::Wild->new();
-  $cfg = Config::Wild->new( $config_file );
+  $cfg = Config::Wild->new( \%attr );
+  $cfg = Config::Wild->new( $config_file, \%attr );
 
 Create a new B<Config::Wild> object, optionally loading configuration
 information from a file.  It returns the new object, or C<undef> upon
 error.
+
+Additional attributes which modify the behavior of the object may be
+specified in the passed C<%attr> hash. They may also be specifed or modified after
+object creation using the C<set_attr> method.
+
+The following attributes are available:
+
+=over
+
+=item C<UNDEF> = function
+
+This defines a function to be called when the value of an undefined
+keyword is requested.  The function is passed the name of the keyword.
+It should return a value, which will be returned as the value of the
+keyword.
+
+For example,
+
+  $cfg = Config::Wild->new( "foo.cnf", { UNDEF => \&undefined_keyword } );
+
+  sub undefined_keyword
+  {
+    my $keyword = shift;
+    return 33;
+  }
+
+You may also use this to centralize error messages:
+
+  sub undefined_keyword
+  {
+    my $keyword = shift;
+    die("undefined keyword requested: $keyword\n");
+  }
+
+To reset this to the default behavior, set C<UNDEF> to C<undef>:
+
+  $cfg->set_attr( UNDEF => undef );
+
+
+=item C<PrintError> = boolean
+
+If true, all errors will result in a call to B<warn()>.  If it is set
+to a reference to a function, that function will be called instead.
+
+=item C<dir> = directory
+
+If specified the current working directory will be changed to the
+specified directory before a configuration file is loaded.
+
+=back
 
 =item B<load>
 
@@ -626,46 +700,6 @@ keywords in the object, C<undef> if not.
 
 Set internal configuration parameters.  It returns C<undef> and sets
 the object's error message upon error.  The available parameters are:
-
-=over 8
-
-=item C<UNDEF>
-
-This defines a function to be called when the value of an undefined
-keyword is requested.  The function is passed the name of the keyword.
-It should return a value, which will be returned as the value of the
-keyword.
-
-For example,
-
-  $cfg = Config::Wild->new( "foo.cnf" );
-  $cfg->set_attr( { UNDEF => \&undefined_keyword } );
-
-  sub undefined_keyword
-  {
-    my $keyword = shift;
-    return 33;
-  }
-
-You may also use this to centralize error messages:
-
-  sub undefined_keyword
-  {
-    my $keyword = shift;
-    die("undefined keyword requested: $keyword\n");
-  }
-
-To reset this to the default behavior, set C<UNDEF> to C<undef>:
-
-  $cfg->set_attr( UNDEF => undef );
-
-
-=item C<PrintError>
-
-If true, all errors will result in a call to B<warn()>.  If it is set
-to a reference to a function, that function will be called instead.
-
-=back
 
 
 =item B<errmsg>
