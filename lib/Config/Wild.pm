@@ -1,6 +1,6 @@
 # --8<--8<--8<--8<--
 #
-# Copyright (C) 2006-2011 Smithsonian Astrophysical Observatory
+# Copyright (C) 1998-2011 Smithsonian Astrophysical Observatory
 #
 # This file is part of Config-Wild
 #
@@ -697,7 +697,7 @@ B<set> and B<value>.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 1998-2006 Smithsonian Astrophysical Observatory
+Copyright 1998-2011 Smithsonian Astrophysical Observatory
 
 This software is released under the GNU General Public License.  You
 may find a copy at
