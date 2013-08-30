@@ -28,7 +28,7 @@ use Carp qw( carp croak );
 use FileHandle;
 use Cwd qw[ getcwd ];
 
-our $VERSION = '1.4';
+our $VERSION = '1.5';
 
 
 sub new {
