@@ -219,6 +219,14 @@ sub get {
     undef;
 }
 
+sub getbool {
+
+    require Lingua::Boolean::Tiny;
+
+    my $self = shift;
+
+    return Lingua::Boolean::Tiny::boolean( $self->get( @_ ) );
+}
 
 sub delete {
     my ( $self, $keyword ) = @_;
@@ -634,6 +642,15 @@ should be available before parsing the configuration file.
 Return the value associated with a given keyword.  B<$keyword> is
 first matched against the absolute keywords, then agains the
 wildcards.  If no match is made, C<undef> is returned.
+
+=item B<getbool>
+
+  $value = $cfg->getbool( $keyword );
+
+Convert the value associated with a given keyword to a true or false
+value using B<L<Lingua::Boolean::Tiny>>.  B<$keyword> is first matched against the absolute keywords,
+then agains the wildcards.  If no match is made, or the value could
+not be converted to a truth value, C<undef> is returned.
 
 
 =item B<delete>

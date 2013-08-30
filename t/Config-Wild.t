@@ -69,5 +69,22 @@ subtest 'relative include' => sub {
     is( $cfg->get( 'foo' ), 1.234, 'include' );
 };
 
+subtest boolean => sub {
+
+    my $cfg = Config::Wild->new( 'cfgs/boolean.cnf' );
+
+    is( $cfg->getbool( 'foo' ), 1, 'yes' );
+    is( $cfg->getbool( 'goo' ), 0, 'no' );
+
+    is( $cfg->getbool( 'bar' ), 1, 'on' );
+    is( $cfg->getbool( 'baz' ), 0, 'off' );
+
+    is( $cfg->getbool( 'que' ), 1, 'A 1' );
+    is( $cfg->getbool( 'qot' ), 0, 'A 0' );
+
+    is( $cfg->getbool( 'flurb' ), undef, 'non-boolean' );
+
+};
+
 
 done_testing;
