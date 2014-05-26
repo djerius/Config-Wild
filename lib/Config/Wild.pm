@@ -30,7 +30,7 @@ use Cwd qw[ getcwd ];
 
 use List::Util qw[ first ];
 
-our $VERSION = '1.5';
+our $VERSION = '1.6';
 
 
 sub new {

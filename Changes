@@ -1,5 +1,13 @@
 Revision history for Perl extension Config::Wild.
 
+1.6  2014-05-26T14:18:42-0400
+
+ [ENHANCEMENT]
+
+  * expanded (interpolated) variables may now be checked against
+    wildcard variables (via the new ExpandWild attribute).
+
+
 1.5  Fri Aug 30 16:00:49 EDT 2013
 
 [ENHANCEMENTS]
