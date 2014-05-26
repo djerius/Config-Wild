@@ -28,6 +28,8 @@ use Carp qw( carp croak );
 use FileHandle;
 use Cwd qw[ getcwd ];
 
+use List::Util qw[ first ];
+
 our $VERSION = '1.5';
 
 
@@ -35,19 +37,23 @@ sub new {
     my $this = shift;
     my $class = ref( $this ) || $this;
 
-    my $attr = ref $_[-1] eq 'HASH' ? pop @_ : {};
-
-    my $self = {
-        wild => [],    # regular expression keywords
-        abs  => {},    # absolute keywords
-        attr => {
+    my %attr = (
             UNDEF      => undef,    # function to call from value when
                                     # keyword not defined
             PrintError => 0,        # warn() on error
             dir        => '.',
-            %$attr,
-        },
+	    ExpandWild => 0,        # match wildcards when expanding
+	       );
 
+    my $attr = ref $_[-1] eq 'HASH' ? pop @_ : {};
+
+    croak( "unknown attribute: $_\n" )
+      foreach grep { ! CORE::exists $attr{$_} } keys %$attr;
+
+    my $self = {
+        wild => [],    # regular expression keywords
+        abs  => {},    # absolute keywords
+        attr => { %attr, %$attr },
     };
 
     bless $self, $class;
@@ -377,7 +383,24 @@ sub _expand {
 
         # expand $(VAR) as a ConfigWild variable
         $value =~ s{\$\((\w+)\)} {
-	    defined $self->{abs}->{$1} ? $self->{abs}->{$1} : '';
+	    my $var = $1;
+	    if ( defined $self->{abs}->{$var} ) {
+                 $self->{abs}->{$var};
+            }
+
+            elsif ( $self->{attr}{ExpandWild}
+		    && (my $kwd = first { $var =~ $_->[0] } @{ $self->{wild} } )
+		  ) {
+
+		$kwd->[1];
+
+	    }
+
+	    else {
+
+		''
+	    }
+
 	}gex
           and $stop = 0;
 
@@ -581,6 +604,13 @@ to a reference to a function, that function will be called instead.
 If specified the current working directory will be changed to the
 specified directory before a configuration file is loaded.
 
+=item C<ExpandWild> = boolean
+
+If set, when expanding C<$(var)> in keyword values, C<var> will be
+matched first against absolute keywords, then against wildcard
+keywords.  If not set (the default), C<var> is matched only against the
+absolute keywords.
+
 =back
 
 =item B<load>
@@ -674,8 +704,9 @@ keywords in the object, C<undef> if not.
 
   $cfg->set_attr( \%attr );
 
-Set internal configuration parameters.  It returns C<undef> and sets
-the object's error message upon error.  The available parameters are:
+Set object attribute. See <L/METHODS/"new"> for a list of attributes.
+
+It returns C<undef> and sets the object's error message upon error.
 
 
 =item B<errmsg>

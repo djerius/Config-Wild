@@ -1,3 +1,5 @@
+#!perl
+
 use Test::More;
 BEGIN { use_ok( 'Config::Wild' ) }
 
@@ -44,6 +46,18 @@ subtest variables => sub {
 
 };
 
+subtest non_existent_expanded_variables => sub {
+
+    my $cfg = Config::Wild->new( 'cfgs/vars.cnf' );
+
+    is( $cfg->get( 'entvar' ), ' or then', 'missing environment variable' );
+
+    $cfg->delete( 'root' );
+
+    is ( $cfg->get( 'twig' ), '/there', 'missing Config::Wild variable' );
+
+    done_testing;
+};
 
 subtest wildcard => sub {
 
@@ -51,6 +65,19 @@ subtest wildcard => sub {
 
     is( $cfg->get( 'goo_1' ),   1234, 'wildcard 1' );
     is( $cfg->get( 'foo_cas' ), 5678, 'wildcard 2' );
+
+    done_testing;
+
+};
+
+subtest expand_wildcard => sub {
+
+    my $cfg = Config::Wild->new( 'cfgs/wildcard.cnf', { ExpandWild => 1 } );
+
+    is( $cfg->get( 'rfoo_1' ),  'foo1', 'expand wildcard w/ abs override' );
+    is( $cfg->get( 'rfoo_2' ), 5678, 'expand wildcard w/ no override' );
+
+    is( $cfg->get( 'rfoo_e' ), '/foo', 'expand non-existent var' );
 
     done_testing;
 
