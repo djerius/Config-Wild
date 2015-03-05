@@ -38,21 +38,21 @@ sub new {
     my $class = ref( $this ) || $this;
 
     my %attr = (
-            UNDEF      => undef,    # function to call from value when
-                                    # keyword not defined
-            PrintError => 0,        # warn() on error
-            dir        => '.',
-	    ExpandWild => 0,        # match wildcards when expanding
-	       );
+        UNDEF      => undef,    # function to call from value when
+                                # keyword not defined
+        PrintError => 0,        # warn() on error
+        dir        => '.',
+        ExpandWild => 0,        # match wildcards when expanding
+    );
 
     my $attr = ref $_[-1] eq 'HASH' ? pop @_ : {};
 
     croak( "unknown attribute: $_\n" )
-      foreach grep { ! CORE::exists $attr{$_} } keys %$attr;
+      foreach grep { !CORE::exists $attr{$_} } keys %$attr;
 
     my $self = {
-        wild => [],    # regular expression keywords
-        abs  => {},    # absolute keywords
+        wild => [],                  # regular expression keywords
+        abs  => {},                  # absolute keywords
         attr => { %attr, %$attr },
     };
 
@@ -216,7 +216,7 @@ sub get {
       if CORE::exists( $self->{abs}->{$keyword} );
 
     foreach ( @{ $self->{wild} } ) {
-	## no critic (ProhibitAccessOfPrivateData)
+        ## no critic (ProhibitAccessOfPrivateData)
         return $self->_expand( $_->[1] ) if $keyword =~ /$_->[0]/;
     }
 
@@ -247,7 +247,7 @@ sub delete {
         delete $self->{abs}->{$keyword};
     }
     else {
-	## no critic (ProhibitAccessOfPrivateData)
+        ## no critic (ProhibitAccessOfPrivateData)
         $self->{wild} = grep( $_->[0] ne $keyword, @{ $self->{wild} } );
     }
     1;
@@ -352,7 +352,7 @@ sub AUTOLOAD {
     else {
         my $found = 0;
         foreach ( @{ $self->{wild} } ) {
-	    ## no critic (ProhibitAccessOfPrivateData)
+            ## no critic (ProhibitAccessOfPrivateData)
             $oldval = $self->_expand( $_->[1] ), $found++, last
               if $keyword =~ /$_->[0]/;
         }
