@@ -40,7 +40,6 @@ sub new {
     my %attr = (
         UNDEF      => undef,    # function to call from value when
                                 # keyword not defined
-        PrintError => 0,        # warn() on error
         dir        => '.',
         ExpandWild => 0,        # match wildcards when expanding
     );
@@ -60,34 +59,27 @@ sub new {
 
     my $file = shift;
 
-    if ( $file ) {
-        $self->load( $file ) or return;
-    }
+    $self->load( $file )
+      if $file;
 
-    $self;
+    return $self;
 }
 
 sub load {
     my ( $self, $file ) = @_;
     my ( $keyword, $value );
 
-    unless ( $file ) {
-        $self->_errmsg( 'load: no file specified' );
-        return;
-    }
+    croak( 'no file specified' )
+      if ! defined $file;
 
     my %files = ();
     my @files = ( { file => $file, pos => 0 } );
 
     my $cwd = getcwd;
-    chdir( $self->{attr}{dir} ) or do {
-        $self->_errmsg(
-            "load: couldn't change directory to $self->{attr}{dir}" );
-        return;
-    };
+    chdir( $self->{attr}{dir} ) or
+      croak( "couldn't change directory to $self->{attr}{dir}" );
 
-    my $ret = eval {
-
+	     eval {
       loop:
         while ( @files ) {
             my $file = $files[0]->{file};
@@ -96,10 +88,8 @@ sub load {
             # if EOF on last file, don't bother with it
             next if $files[0]->{pos} == -1;
 
-            my $fh = new FileHandle $file or do {
-                $self->_errmsg( "load: error opening file `$file'" );
-                return;
-            };
+            my $fh = new FileHandle $file or
+	      croak( "error opening file `$file': $!" );
 
             seek( $fh, $files[0]->{pos}, 0 );
 
@@ -115,21 +105,17 @@ sub load {
                 chomp;
 
                 if ( /^\s*%include\s+(.*)/ ) {
-                    if ( CORE::exists $files{$1} ) {
-                        $self->_errmsg(
-                            "load: infinite loop trying to read $1" );
-                        return;
-                    }
+
+		    croak( "infinite loop trying to read $1" )
+		      if ( CORE::exists $files{$1} );
+
                     $files{$1}++;
                     unshift @files, { file => $1, pos => 0 };
                     $fh->close;
                     redo loop;
                 }
 
-                $self->_parsepair( $_ ) or do {
-                    $self->_errmsg( "load: $file: can't parse line $line" );
-                    return;
-                  }
+                $self->_parsepair( $_ ) or croak( "$file: can't parse line $line" );
 
             }
 
@@ -138,17 +124,13 @@ sub load {
             shift @files;
         }
 
-
-        return 1;
     };
 
-    chdir( $cwd ) or do {
-        $self->_errmsg( "load: error restoring directory to $cwd" );
-        return;
-    };
+     croak( $@ ) if $@;
 
+    chdir( $cwd ) or croak( "error restoring directory to $cwd" );
 
-    return $ret;
+    return;
 }
 
 sub load_cmd {
@@ -162,17 +144,13 @@ sub load_cmd {
             && ( $keyword = ( $self->_splitpair( $_ ) )[0] )
             && !$self->_exists( $keyword ) )
         {
-            $self->_errmsg( "load_cmd: keyword `$keyword' doesn't exist" );
-            return;
+            croak( "keyword `$keyword' doesn't exist" );
         }
 
-        $self->_parsepair( $_ ) or do {
-            $self->_errmsg( "load_cmd: can't parse line $_" );
-            return;
-          }
+        $self->_parsepair( $_ ) or croak( "can't parse line $_" );
     }
 
-    1;
+    return;
 }
 
 
@@ -200,17 +178,20 @@ sub set {
 }
 
 # for backwards compatibility
-sub value {
-    goto &get;
-}
+=pod
+
+=for pod_coverage
+
+*value = \&get;
+
+=cut
 
 sub get {
     my ( $self, $keyword ) = @_;
 
-    unless ( $keyword ) {
-        $self->_errmsg( 'value: no keyword specified' );
-        return;
-    }
+    croak( 'no keyword specified' )
+      if ! defined $keyword;
+
 
     return $self->_expand( $self->{abs}->{$keyword} )
       if CORE::exists( $self->{abs}->{$keyword} );
@@ -223,7 +204,7 @@ sub get {
     return $self->{attr}{UNDEF}->( $keyword )
       if defined $self->{attr}{UNDEF};
 
-    undef;
+    return;
 }
 
 sub getbool {
@@ -238,10 +219,8 @@ sub getbool {
 sub delete {
     my ( $self, $keyword ) = @_;
 
-    unless ( $keyword ) {
-        $self->_errmsg( 'delete: no keyword specified' );
-        return;
-    }
+    croak( 'no keyword specified' )
+      if ! defined $keyword;
 
     if ( CORE::exists $self->{abs}->{$keyword} ) {
         delete $self->{abs}->{$keyword};
@@ -256,10 +235,8 @@ sub delete {
 sub exists {
     my ( $self, $keyword ) = @_;
 
-    unless ( $keyword ) {
-        $self->_errmsg( 'exists: no keyword specified' );
-        return;
-    }
+    croak( 'no keyword specified' )
+      if ! defined $keyword;
 
     return $self->_exists( $keyword );
 }
@@ -283,36 +260,15 @@ sub set_attr {
     my ( $key, $value );
 
     while ( ( $key, $value ) = each %{$attr} ) {
-        unless ( CORE::exists $self->{attr}{$key} ) {
-            $self->_errmsg( "set_attr: unknown attribute: `$key'" );
-            return;
-        }
+
+	croak( "unknown attribute: `$key'" )
+	  unless CORE::exists $self->{attr}{$key};
+
+
         $self->{attr}{$key} = $value;
     }
 
 }
-
-
-
-sub errmsg {
-    my $self = shift;
-    return $self->{errmsg};
-}
-
-sub _errmsg {
-    my ( $self, $errmsg ) = @_;
-
-    $self->{errmsg} = __PACKAGE__ . ': ' . $errmsg;
-    if ( $self->{attr}{PrintError} ) {
-        if ( ref( $self->{attr}{PrintError} ) eq 'CODE' ) {
-            $self->{attr}{PrintError}->( $errmsg );
-        }
-        else {
-            warn $errmsg, "\n";
-        }
-    }
-}
-
 
 #========================================================================
 #
@@ -328,7 +284,7 @@ sub _errmsg {
 #    $foo = $cfg->variable(); # get the current value
 #
 # Returns the current value of the variable, taken before any new value
-# is set.  Prints a warning if the variable isn't defined (i.e. doesn't
+# is set.  Throws an exception if the variable isn't defined (i.e. doesn't
 # exist rather than exists with an undef value) and returns undef.
 #
 #========================================================================
@@ -360,8 +316,7 @@ sub AUTOLOAD {
             return $self->{attr}{UNDEF}->( $keyword )
               if defined( $self->{attr}{UNDEF} );
 
-            $self->{errmsg} = __PACKAGE__ . ": $keyword doesn't exist";
-            return;
+	    croak( "$keyword doesn't exist" );
         }
     }
 
@@ -556,8 +511,7 @@ the input stream to the specified I<file>.
   $cfg = Config::Wild->new( $config_file, \%attr );
 
 Create a new B<Config::Wild> object, optionally loading configuration
-information from a file.  It returns the new object, or C<undef> upon
-error.
+information from a file. 
 
 Additional attributes which modify the behavior of the object may be
 specified in the passed C<%attr> hash. They may also be specifed or modified after
@@ -597,11 +551,6 @@ To reset this to the default behavior, set C<UNDEF> to C<undef>:
   $cfg->set_attr( UNDEF => undef );
 
 
-=item C<PrintError> = boolean
-
-If true, all errors will result in a call to B<warn()>.  If it is set
-to a reference to a function, that function will be called instead.
-
 =item C<dir> = directory
 
 If specified the current working directory will be changed to the
@@ -630,8 +579,7 @@ last-in first-out (LIFO) list, so that when the application requests a
 value, it will use search the wildcard keywords in reverse order that
 they were specified.
 
-It returns 1 upon success, C<undef> if an error ocurred.  The error
-message may be retrieved with the B<errmsg> method.
+It throws an exception (as a string) if an error ocurred.
 
 
 =item B<load_cmd>
@@ -653,13 +601,7 @@ wildcards.
 
 =back
 
-Upon success, it returns 1, upon error it returns C<undef> and sets
-the object's error message (see B<errmsg()>).
-
-For example,
-
-  $cfg->load_cmd( \@ARGV, { Exists => 1} )
-    || die( $cfg->errmsg, "\n" );
+It throws an exception (as a string) if an error ocurred.
 
 =item B<set>
 
@@ -708,13 +650,6 @@ keywords in the object, C<undef> if not.
   $cfg->set_attr( \%attr );
 
 Set object attribute. See <L/METHODS/"new"> for a list of attributes.
-
-It returns C<undef> and sets the object's error message upon error.
-
-
-=item B<errmsg>
-
-Returns the last error message stored in the object;
 
 =back
 
