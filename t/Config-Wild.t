@@ -3,16 +3,18 @@
 use Test::More;
 BEGIN { use_ok( 'Config::Wild' ) }
 
+my $data_dir = 't/data/cfgs';
+
 subtest autoload => sub {
 
-    my $cfg = Config::Wild->new( 'cfgs/test.cnf' );
+    my $cfg = Config::Wild->new( "$data_dir/test.cnf" );
 
     is( $cfg->foo, 'ok', 'autoload' );
 };
 
 subtest blanks => sub {
 
-    my $cfg = Config::Wild->new( 'cfgs/blanks.cnf' );
+    my $cfg = Config::Wild->new( "$data_dir/blanks.cnf" );
 
     is( $cfg->get( 'foo' ), 'bar',  'trailing blanks' );
     is( $cfg->get( 'too' ), 'good', 'leading blanks' );
@@ -21,7 +23,7 @@ subtest blanks => sub {
 
 subtest variables => sub {
 
-    my $cfg = Config::Wild->new( 'cfgs/vars.cnf' );
+    my $cfg = Config::Wild->new( "$data_dir/vars.cnf" );
 
     is( $cfg->get( 'twig' ), 'here/there', 'internal vars' );
 
@@ -48,7 +50,7 @@ subtest variables => sub {
 
 subtest non_existent_expanded_variables => sub {
 
-    my $cfg = Config::Wild->new( 'cfgs/vars.cnf' );
+    my $cfg = Config::Wild->new( "$data_dir/vars.cnf" );
 
     is( $cfg->get( 'entvar' ), ' or then', 'missing environment variable' );
 
@@ -61,7 +63,7 @@ subtest non_existent_expanded_variables => sub {
 
 subtest wildcard => sub {
 
-    my $cfg = Config::Wild->new( 'cfgs/wildcard.cnf' );
+    my $cfg = Config::Wild->new( "$data_dir/wildcard.cnf" );
 
     is( $cfg->get( 'goo_1' ),   1234, 'wildcard 1' );
     is( $cfg->get( 'foo_cas' ), 5678, 'wildcard 2' );
@@ -72,7 +74,7 @@ subtest wildcard => sub {
 
 subtest expand_wildcard => sub {
 
-    my $cfg = Config::Wild->new( 'cfgs/wildcard.cnf', { ExpandWild => 1 } );
+    my $cfg = Config::Wild->new( "$data_dir/wildcard.cnf", { ExpandWild => 1 } );
 
     is( $cfg->get( 'rfoo_1' ),  'foo1', 'expand wildcard w/ abs override' );
     is( $cfg->get( 'rfoo_2' ), 5678, 'expand wildcard w/ no override' );
@@ -85,20 +87,21 @@ subtest expand_wildcard => sub {
 
 subtest 'absolute include' => sub {
 
-    my $cfg = Config::Wild->new( 'cfgs/include0.cnf' );
+    my $cfg = Config::Wild->new( "$data_dir/include0.cnf" );
 
     is( $cfg->get( 'foo' ), 1.234, 'include' );
 };
 
+
 subtest 'relative include' => sub {
-    my $cfg = Config::Wild->new( 'include0-rel.cnf', { dir => 'cfgs' } );
+    my $cfg = Config::Wild->new( 'include0-rel.cnf', { dir => $data_dir } );
 
     is( $cfg->get( 'foo' ), 1.234, 'include' );
 };
 
 subtest boolean => sub {
 
-    my $cfg = Config::Wild->new( 'cfgs/boolean.cnf' );
+    my $cfg = Config::Wild->new( "$data_dir/boolean.cnf" );
 
     is( $cfg->getbool( 'foo' ), 1, 'yes' );
     is( $cfg->getbool( 'goo' ), 0, 'no' );
