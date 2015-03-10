@@ -24,11 +24,12 @@ package Config::Wild;
 use strict;
 use warnings;
 
-use Carp qw( carp croak );
-use FileHandle;
+use Carp;
 use Cwd qw[ getcwd ];
 
 use List::Util qw[ first ];
+use File::pushd;
+use Path::Tiny qw[ path cwd ];
 
 our $VERSION = '1.6';
 
@@ -40,24 +41,34 @@ sub new {
     my %attr = (
         UNDEF      => undef,    # function to call from value when
                                 # keyword not defined
-        dir        => '.',
+        dir        => undef,
+        path       => undef,
         ExpandWild => 0,        # match wildcards when expanding
     );
 
     my $attr = ref $_[-1] eq 'HASH' ? pop @_ : {};
 
-    croak( "unknown attribute: $_\n" )
-      foreach grep { !CORE::exists $attr{$_} } keys %$attr;
+    ## no critic (ProhibitAccessOfPrivateData)
+    $attr{$_} = $attr->{$_}
+      for
+      grep { CORE::exists( $attr{$_} ) or croak( "unknown attribute: $_\n" ) }
+      keys %$attr;
+
+    croak( "options dir and path may not both be specified\n" )
+      if defined $attr{dir} && defined $attr{path};
 
     my $self = {
-        wild => [],                  # regular expression keywords
-        abs  => {},                  # absolute keywords
-        attr => { %attr, %$attr },
+        wild => [],       # regular expression keywords
+        abs  => {},       # absolute keywords
+        attr => \%attr,
     };
 
     bless $self, $class;
 
     my $file = shift;
+
+    croak( "extra arguments passed to new. forgot a hashref?\n" )
+      if @_;
 
     $self->load( $file )
       if $file;
@@ -67,70 +78,82 @@ sub new {
 
 sub load {
     my ( $self, $file ) = @_;
-    my ( $keyword, $value );
 
     croak( 'no file specified' )
-      if ! defined $file;
+      if !defined $file;
 
-    my %files = ();
-    my @files = ( { file => $file, pos => 0 } );
+    my $cwd
+      = defined $self->{attr}{dir}
+      ? pushd( $self->{attr}{dir} )
+      : cwd;
 
-    my $cwd = getcwd;
-    chdir( $self->{attr}{dir} ) or
-      croak( "couldn't change directory to $self->{attr}{dir}" );
+    $self->_read_config( $file, path( $cwd ) );
 
-	     eval {
-      loop:
-        while ( @files ) {
-            my $file = $files[0]->{file};
-            my $pos  = $files[0]->{pos};
+}
 
-            # if EOF on last file, don't bother with it
-            next if $files[0]->{pos} == -1;
+# note that Path::Tiny::path will strip ./ from ./file, so
+# don't convert file to a P::T object until after
+# checking for ./
+sub _read_config {
 
-            my $fh = new FileHandle $file or
-	      croak( "error opening file `$file': $!" );
+    my $self = shift;
 
-            seek( $fh, $files[0]->{pos}, 0 );
+    my ( $file, $cwd ) = @_;
 
-            # loop through file
-            my $line = 0;
-            while ( <$fh> ) {
-                $files[0]->{pos} = tell;
-                $line++;
+    my $file_p = path( $file );
 
-                # ignore comment lines or empty lines
-                next if /^\s*\#|^\s*$/;
+    # relative to current dir or parent
+    if ( ! defined $self->{attr}{dir} && $file =~ m|^[.]{1,2}/| ) {
 
-                chomp;
+	$file_p = $cwd->child( $file );
 
-                if ( /^\s*%include\s+(.*)/ ) {
+    }
 
-		    croak( "infinite loop trying to read $1" )
-		      if ( CORE::exists $files{$1} );
 
-                    $files{$1}++;
-                    unshift @files, { file => $1, pos => 0 };
-                    $fh->close;
-                    redo loop;
-                }
+    elsif ( $self->{attr}{path} && !$file_p->is_absolute ) {
 
-                $self->_parsepair( $_ ) or croak( "$file: can't parse line $line" );
+	for my $path ( @{ $self->{attr}{path} } ) {
 
-            }
+	    $file_p = path( $path, $file );
+	    last if $file_p->is_file;
+
+	}
+	continue {
+	    undef $file_p;
+	}
+
+	croak( "unable to find $file in ",
+	       join( ':', @{ $self->{attr}{path} } ), "\n" )
+	  unless defined $file_p;
+
+    }
+
+    my @lines = $file_p->lines( { chomp => 1 } );
+
+    my $line_idx = 1;
+    for my $line ( @lines ) {
+
+        # ignore comment lines or empty lines
+        next if $line =~ /^\s*\#|^\s*$/;
+
+        if ( $line =~ /^\s*%include\s+(.*)/ ) {
+
+            $self->_read_config( $1, $file_p->parent );
 
         }
-        continue {
-            shift @files;
+
+        else {
+
+            $self->_parsepair( $line )
+              or croak( $file_p->realpath->stringify,
+                ": can't parse line $line_idx" );
         }
 
-    };
+    }
+    continue {
+        ++$line_idx;
+    }
 
-     croak( $@ ) if $@;
-
-    chdir( $cwd ) or croak( "error restoring directory to $cwd" );
-
-    return;
 }
 
 sub load_cmd {
@@ -180,17 +203,21 @@ sub set {
 # for backwards compatibility
 =pod
 
-=for pod_coverage
+=begin pod_coverage
 
-*value = \&get;
+=head3 value
+
+=end pod_coverage
 
 =cut
+
+*value = \&get;
 
 sub get {
     my ( $self, $keyword ) = @_;
 
     croak( 'no keyword specified' )
-      if ! defined $keyword;
+      if !defined $keyword;
 
 
     return $self->_expand( $self->{abs}->{$keyword} )
@@ -220,7 +247,7 @@ sub delete {
     my ( $self, $keyword ) = @_;
 
     croak( 'no keyword specified' )
-      if ! defined $keyword;
+      if !defined $keyword;
 
     if ( CORE::exists $self->{abs}->{$keyword} ) {
         delete $self->{abs}->{$keyword};
@@ -236,7 +263,7 @@ sub exists {
     my ( $self, $keyword ) = @_;
 
     croak( 'no keyword specified' )
-      if ! defined $keyword;
+      if !defined $keyword;
 
     return $self->_exists( $keyword );
 }
@@ -261,8 +288,8 @@ sub set_attr {
 
     while ( ( $key, $value ) = each %{$attr} ) {
 
-	croak( "unknown attribute: `$key'" )
-	  unless CORE::exists $self->{attr}{$key};
+        croak( "unknown attribute: `$key'" )
+          unless CORE::exists $self->{attr}{$key};
 
 
         $self->{attr}{$key} = $value;
@@ -316,7 +343,7 @@ sub AUTOLOAD {
             return $self->{attr}{UNDEF}->( $keyword )
               if defined( $self->{attr}{UNDEF} );
 
-	    croak( "$keyword doesn't exist" );
+            croak( "$keyword doesn't exist" );
         }
     }
 
@@ -420,31 +447,34 @@ Config::Wild - parse an application configuration file with wildcard keywords
 
 =head1 DESCRIPTION
 
-This is a simple package to parse and present to an application
-configuration information read from a configuration file.
+This module reads I<key - value> data pairs from a file.  What sets
+it apart from other configuration systems is that keys may contain
+Perl regular expressions, allowing one entry to match multiple
+requested keys.
+
 Configuration information in the file has the form
 
-  keyword = value
+  key = value
 
-where I<keyword> is a token which may contain Perl regular expressions
-surrounded by curly brackets, i.e.
+where I<key> is a token which may contain Perl regular expressions
+surrounded by curly brackets, e.g.
 
   foobar.{\d+}.name = goo
 
 and I<value> is the remainder of the line after any whitespace following
 the C<=> character is removed.
 
-Keywords which contain regular expressions are termed I<wildcard>
-keywords; those without are called I<absolute> keywords.  Wildcard
-keywords serve as templates to allow grouping of keywords which have
-the same value.  For instance, say you've got a set of keywords which
+Keys which contain regular expressions are termed I<wildcard>
+keys; those without are called I<absolute> keys.  Wildcard
+keys serve as templates to allow grouping of keys which have
+the same value.  For instance, say you've got a set of keys which
 normally have the same value, but where on occaision you'd like to
 override the default:
 
   p.{\d+}.foo = goo
   p.99.foo = flabber
 
-I<value> may reference environmental variables or other B<Config::Wild>
+I<value> may reference environment variables or other B<Config::Wild>
 variables via the following expressions:
 
 =over 4
@@ -479,7 +509,7 @@ C<tree> will evaluate to C</root/branch/tree>.
 
 I<Either> type of variable may be accessed via C<$var>.
 In this case, if I<var> is not a B<Config::Wild> variable, it is
-assumed to be an environmental variable.
+assumed to be an environment variable.
 If the variable doesn't exist, the expression is left as is.
 
 =back
@@ -488,22 +518,86 @@ Substitutions are made when the B<value> method is called, not when
 the values are first read in.
 
 Lines which begin with the C<#> character are ignored.  There is also a
-set of directives which alter the where and how B<Config::Wild> reads
+set of directives which alter where and how B<Config::Wild> reads
 configuration information.  Each directive begins with the C<%> character
 and appears alone on a line in the config file:
 
 =over 4
 
-=item B<%include file>
+=item B<%include> F<path>
 
-Temporarily interrupt parsing of the current input file, and switch
-the input stream to the specified I<file>.
+Temporarily interrupt parsing of the current configuration file, and
+switch the input stream to the file specified via I<path>.
+See L</Finding Configuration Files>.
 
 =back
 
+=head2 Finding Configuration Files
+
+The C<dir> and C<path> options to the constructor determine where
+configuration files are searched for.  They are optional and may not be
+specified in combination.
+
+In the following tables:
+
+=over
+
+=item *
+
+C<file> is the provided path to the configuration file.
+
+=item *
+
+C<option = default> indicates that neither C<dir> nor C<path>
+has been specified.
+
+=item *
+
+The file patterns are,
+
+  /*         absolute path
+  ./* ../*   paths relative to the current directory
+  *          all other paths
+
+=item *
+
+In the results,
+
+  cwd        the current working directory
+  path       an entry in the path option array
+
+=back
+
+=head3 Files loaded via B<new> and B<load>
+
+  +==========================================+
+  |         |            file                |
+  |---------+--------------------------------|
+  | option  |  /*  |  ./* ../*   |  *        |
+  |==========================================|
+  | default | file | cwd/file    | cwd/file  |
+  | path    | file | cwd/file    | path/file |
+  | dir     | file | dir/file    | dir/file  |
+  +---------+------+-------------+-----------+
+
+=head3 Files included from other files
+
+C<incdir> is the directory containing the file including the new
+configuration file, e.g. the one with the C<%include> directive.
+
+  +==========================================+
+  |         |            file                |
+  |---------+--------------------------------|
+  | option  |  /*  |  ./* ../*   |  *        |
+  |==========================================|
+  | default | file | incdir/file | cwd/file  |
+  | path    | file | incdir/file | path/file |
+  | dir     | file | dir/file    | dir/file  |
+  +---------+------+-------------+-----------+
+
 =head1 METHODS
 
-=over 4
+=over
 
 =item B<new>
 
@@ -511,7 +605,10 @@ the input stream to the specified I<file>.
   $cfg = Config::Wild->new( $config_file, \%attr );
 
 Create a new B<Config::Wild> object, optionally loading configuration
-information from a file. 
+information from a file.
+
+See L</Finding Configuration Files> for more information on how
+configuration files are found.
 
 Additional attributes which modify the behavior of the object may be
 specified in the passed C<%attr> hash. They may also be specifed or modified after
@@ -521,29 +618,29 @@ The following attributes are available:
 
 =over
 
-=item C<UNDEF> = function
+=item C<UNDEF> I<subroutine reference>
 
-This defines a function to be called when the value of an undefined
-keyword is requested.  The function is passed the name of the keyword.
+This specifies a subroutine to be called when the value of an undefined
+key is requested.  The subroutine is passed the name of the key.
 It should return a value, which will be returned as the value of the
-keyword.
+key.
 
 For example,
 
-  $cfg = Config::Wild->new( "foo.cnf", { UNDEF => \&undefined_keyword } );
+  $cfg = Config::Wild->new( "foo.cnf", { UNDEF => \&undefined_key } );
 
-  sub undefined_keyword
+  sub undefined_key
   {
-    my $keyword = shift;
+    my $key = shift;
     return 33;
   }
 
 You may also use this to centralize error messages:
 
-  sub undefined_keyword
+  sub undefined_key
   {
-    my $keyword = shift;
-    die("undefined keyword requested: $keyword\n");
+    my $key = shift;
+    die("undefined key requested: $key\n");
   }
 
 To reset this to the default behavior, set C<UNDEF> to C<undef>:
@@ -551,17 +648,29 @@ To reset this to the default behavior, set C<UNDEF> to C<undef>:
   $cfg->set_attr( UNDEF => undef );
 
 
-=item C<dir> = directory
+=item C<dir> F<directory>
 
-If specified the current working directory will be changed to the
+If specified, the current working directory will be changed to the
 specified directory before a configuration file is loaded.
 
-=item C<ExpandWild> = boolean
+See L</Finding Configuration Files>.
 
-If set, when expanding C<$(var)> in keyword values, C<var> will be
-matched first against absolute keywords, then against wildcard
-keywords.  If not set (the default), C<var> is matched only against the
-absolute keywords.
+This option may not be combined with the C<path> option.
+
+=item C<path> I<paths>
+
+An array of paths to search for configuration files.
+
+See L</Finding Configuration Files>.
+
+This option may not be combined with the C<dir> option.
+
+=item C<ExpandWild> I<boolean>
+
+If set, when expanding C<$(var)> in key values, C<var> will be
+matched first against absolute keys, then against wildcard
+keys.  If not set (the default), C<var> is matched only against the
+absolute keys.
 
 =back
 
@@ -571,15 +680,18 @@ absolute keywords.
 
 Load information from a configuration file into the current object.
 New configuration values will supersede previous ones, in the
-following complicated fashion.  Absolutely specified keywords will
+following complicated fashion.  Absolutely specified keys will
 overwrite previously absolutely specified values.  Since it is
-difficult to determine whether the set of keywords matched by two
-regular expressions overlap, wildcard keywords are pushed onto a
+difficult to determine whether the set of keys matched by two
+regular expressions overlap, wildcard keys are pushed onto a
 last-in first-out (LIFO) list, so that when the application requests a
-value, it will use search the wildcard keywords in reverse order that
+value, it will use search the wildcard keys in reverse order that
 they were specified.
 
 It throws an exception (as a string) if an error ocurred.
+
+See L</Finding Configuration Files> for more information on how
+configuration files are found.
 
 
 =item B<load_cmd>
@@ -587,16 +699,16 @@ It throws an exception (as a string) if an error ocurred.
   $cfg->load_cmd( \@ARGV );
   $cfg->load_cmd( \@ARGV,\%attr );
 
-Parse an array of keyword-value pairs (possibly command line
-arguments), and insert them into the list of keywords.  It can take an
+Parse an array of key-value pairs (possibly command line
+arguments), and insert them into the list of keys.  It can take an
 optional hash of attributes with the following values:
 
 =over 8
 
 =item C<Exists>
 
-If true, the keywords must already exist. An error will be returned if
-the keyword isn't in the absolute list, or doesn't match against the
+If true, the keys must already exist. An error will be returned if
+the key isn't in the absolute list, or doesn't match against the
 wildcards.
 
 =back
@@ -605,44 +717,44 @@ It throws an exception (as a string) if an error ocurred.
 
 =item B<set>
 
-  $cfg->set( $keyword, $value );
+  $cfg->set( $key, $value );
 
-Explicitly set a keyword to a value.  Useful to specify keywords that
+Explicitly set a key to a value.  Useful to specify keys that
 should be available before parsing the configuration file.
 
 =item B<get>
 
-  $value = $cfg->get( $keyword );
+  $value = $cfg->get( $key );
 
-Return the value associated with a given keyword.  B<$keyword> is
-first matched against the absolute keywords, then agains the
+Return the value associated with a given key.  B<$key> is
+first matched against the absolute keys, then agains the
 wildcards.  If no match is made, C<undef> is returned.
 
 =item B<getbool>
 
-  $value = $cfg->getbool( $keyword );
+  $value = $cfg->getbool( $key );
 
-Convert the value associated with a given keyword to a true or false
-value using B<L<Lingua::Boolean::Tiny>>.  B<$keyword> is first matched against the absolute keywords,
+Convert the value associated with a given key to a true or false
+value using B<L<Lingua::Boolean::Tiny>>.  B<$key> is first matched against the absolute keys,
 then agains the wildcards.  If no match is made, or the value could
 not be converted to a truth value, C<undef> is returned.
 
 
 =item B<delete>
 
-  $cfg->delete( $keyword );
+  $cfg->delete( $key );
 
-Delete C<$keyword> from the list of keywords (either absolute or wild)
-stored in the object.  The keyword must be an exact match.  It is not
-an error to delete a keyword which doesn't exist.
+Delete C<$key> from the list of keys (either absolute or wild)
+stored in the object.  The key must be an exact match.  It is not
+an error to delete a key which doesn't exist.
 
 
 =item B<exists>
 
-  $exists = $cfg->exists( $keyword );
+  $exists = $cfg->exists( $key );
 
-Returns non-zero if the given keyword matches against the list of
-keywords in the object, C<undef> if not.
+Returns non-zero if the given key matches against the list of
+keys in the object, C<undef> if not.
 
 
 =item B<set_attr>
@@ -654,22 +766,22 @@ Set object attribute. See <L/METHODS/"new"> for a list of attributes.
 =back
 
 There are also "hidden" methods which allow more natural access to
-keywords.  You may access a keyword's value by specifying the keyword
+keys.  You may access a key's value by specifying the key
 as the method, instead of using B<value>.  The following are
 equivalent:
 
-   $foo = $cfg->get( 'keyword' );
-   $foo = $cfg->keyword;
+   $foo = $cfg->get( 'key' );
+   $foo = $cfg->key;
 
-If C<keyword> doesn't exist, it returns C<undef>.
+If C<key> doesn't exist, it returns C<undef>.
 
-Similarly, you can set a keyword's value using a similar syntax.  The
-following are equivalent, if the keyword already exists:
+Similarly, you can set a key's value using a similar syntax.  The
+following are equivalent, if the key already exists:
 
-   $cfg->set( 'keyword', $value );
-   $cfg->keyword( $value );
+   $cfg->set( 'key', $value );
+   $cfg->key( $value );
 
-If the keyword doesn't exist, the second statement does nothing.
+If the key doesn't exist, the second statement does nothing.
 
 It is a bit more time consuming to use these methods rather than using
 B<set> and B<value>.

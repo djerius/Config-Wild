@@ -1,6 +1,8 @@
 #!perl
 
 use Test::More;
+use Test::Fatal;
+
 BEGIN { use_ok( 'Config::Wild' ) }
 
 my $data_dir = 't/data/cfgs';
@@ -37,11 +39,8 @@ subtest variables => sub {
 
     is( $cfg->get( 'nest3' ), '0/1/2/3', 'nested internal' );
 
-    is(
-        $cfg->get( 'enest2' ),
-        'not now/or then/or how',
-        'nested internal/env'
-    );
+    is( $cfg->get( 'enest2' ), 'not now/or then/or how',
+        'nested internal/env' );
 
     done_testing;
 
@@ -56,7 +55,7 @@ subtest non_existent_expanded_variables => sub {
 
     $cfg->delete( 'root' );
 
-    is ( $cfg->get( 'twig' ), '/there', 'missing Config::Wild variable' );
+    is( $cfg->get( 'twig' ), '/there', 'missing Config::Wild variable' );
 
     done_testing;
 };
@@ -74,29 +73,16 @@ subtest wildcard => sub {
 
 subtest expand_wildcard => sub {
 
-    my $cfg = Config::Wild->new( "$data_dir/wildcard.cnf", { ExpandWild => 1 } );
+    my $cfg
+      = Config::Wild->new( "$data_dir/wildcard.cnf", { ExpandWild => 1 } );
 
-    is( $cfg->get( 'rfoo_1' ),  'foo1', 'expand wildcard w/ abs override' );
-    is( $cfg->get( 'rfoo_2' ), 5678, 'expand wildcard w/ no override' );
+    is( $cfg->get( 'rfoo_1' ), 'foo1', 'expand wildcard w/ abs override' );
+    is( $cfg->get( 'rfoo_2' ), 5678,   'expand wildcard w/ no override' );
 
     is( $cfg->get( 'rfoo_e' ), '/foo', 'expand non-existent var' );
 
     done_testing;
 
-};
-
-subtest 'absolute include' => sub {
-
-    my $cfg = Config::Wild->new( "$data_dir/include0.cnf" );
-
-    is( $cfg->get( 'foo' ), 1.234, 'include' );
-};
-
-
-subtest 'relative include' => sub {
-    my $cfg = Config::Wild->new( 'include0-rel.cnf', { dir => $data_dir } );
-
-    is( $cfg->get( 'foo' ), 1.234, 'include' );
 };
 
 subtest boolean => sub {
@@ -113,6 +99,18 @@ subtest boolean => sub {
     is( $cfg->getbool( 'qot' ), 0, 'A 0' );
 
     is( $cfg->getbool( 'flurb' ), undef, 'non-boolean' );
+
+};
+
+
+subtest 'dir+path' => sub {
+
+    like(
+        exception { Config::Wild->new( { dir => '.', path => ['.'] } ) },
+        qr/options dir and path may not/,
+        "dir + path may not be combined"
+    );
+
 
 };
 
