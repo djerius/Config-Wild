@@ -1,6 +1,6 @@
 # --8<--8<--8<--8<--
 #
-# Copyright (C) 1998-2011 Smithsonian Astrophysical Observatory
+# Copyright (C) 1998-2015 Smithsonian Astrophysical Observatory
 #
 # This file is part of Config-Wild
 #
@@ -61,7 +61,7 @@ sub new {
     my $file = shift;
 
     if ( $file ) {
-        $self->load( $file ) or return undef;
+        $self->load( $file ) or return;
     }
 
     $self;
@@ -73,7 +73,7 @@ sub load {
 
     unless ( $file ) {
         $self->_errmsg( 'load: no file specified' );
-        return undef;
+        return;
     }
 
     my %files = ();
@@ -83,7 +83,7 @@ sub load {
     chdir( $self->{attr}{dir} ) or do {
         $self->_errmsg(
             "load: couldn't change directory to $self->{attr}{dir}" );
-        return undef;
+        return;
     };
 
     my $ret = eval {
@@ -118,7 +118,7 @@ sub load {
                     if ( CORE::exists $files{$1} ) {
                         $self->_errmsg(
                             "load: infinite loop trying to read $1" );
-                        return undef;
+                        return;
                     }
                     $files{$1}++;
                     unshift @files, { file => $1, pos => 0 };
@@ -144,7 +144,7 @@ sub load {
 
     chdir( $cwd ) or do {
         $self->_errmsg( "load: error restoring directory to $cwd" );
-        return undef;
+        return;
     };
 
 
@@ -163,12 +163,12 @@ sub load_cmd {
             && !$self->_exists( $keyword ) )
         {
             $self->_errmsg( "load_cmd: keyword `$keyword' doesn't exist" );
-            return undef;
+            return;
         }
 
         $self->_parsepair( $_ ) or do {
             $self->_errmsg( "load_cmd: can't parse line $_" );
-            return undef;
+            return;
           }
     }
 
@@ -209,13 +209,14 @@ sub get {
 
     unless ( $keyword ) {
         $self->_errmsg( 'value: no keyword specified' );
-        return undef;
+        return;
     }
 
     return $self->_expand( $self->{abs}->{$keyword} )
       if CORE::exists( $self->{abs}->{$keyword} );
 
     foreach ( @{ $self->{wild} } ) {
+	## no critic (ProhibitAccessOfPrivateData)
         return $self->_expand( $_->[1] ) if $keyword =~ /$_->[0]/;
     }
 
@@ -239,13 +240,14 @@ sub delete {
 
     unless ( $keyword ) {
         $self->_errmsg( 'delete: no keyword specified' );
-        return undef;
+        return;
     }
 
     if ( CORE::exists $self->{abs}->{$keyword} ) {
         delete $self->{abs}->{$keyword};
     }
     else {
+	## no critic (ProhibitAccessOfPrivateData)
         $self->{wild} = grep( $_->[0] ne $keyword, @{ $self->{wild} } );
     }
     1;
@@ -256,7 +258,7 @@ sub exists {
 
     unless ( $keyword ) {
         $self->_errmsg( 'exists: no keyword specified' );
-        return undef;
+        return;
     }
 
     return $self->_exists( $keyword );
@@ -283,7 +285,7 @@ sub set_attr {
     while ( ( $key, $value ) = each %{$attr} ) {
         unless ( CORE::exists $self->{attr}{$key} ) {
             $self->_errmsg( "set_attr: unknown attribute: `$key'" );
-            return undef;
+            return;
         }
         $self->{attr}{$key} = $value;
     }
@@ -350,6 +352,7 @@ sub AUTOLOAD {
     else {
         my $found = 0;
         foreach ( @{ $self->{wild} } ) {
+	    ## no critic (ProhibitAccessOfPrivateData)
             $oldval = $self->_expand( $_->[1] ), $found++, last
               if $keyword =~ /$_->[0]/;
         }
@@ -358,7 +361,7 @@ sub AUTOLOAD {
               if defined( $self->{attr}{UNDEF} );
 
             $self->{errmsg} = __PACKAGE__ . ": $keyword doesn't exist";
-            return undef;
+            return;
         }
     }
 
@@ -438,7 +441,7 @@ sub _parsepair {
     $pair =~ s/^\s+//;
     $pair =~ s/\s+$//;
 
-    return undef
+    return
       if 2 != ( ( $keyword, $value ) = $pair =~ /([^=\s]*)\s*=\s*(.*)/ );
 
     $self->set( $keyword, $value );
