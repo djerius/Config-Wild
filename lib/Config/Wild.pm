@@ -24,12 +24,18 @@ package Config::Wild;
 use strict;
 use warnings;
 
+use custom::failures __PACKAGE__ . '::Error' => [ 'exists', 'read', 'parse' ];
+
 use Carp;
 use Cwd qw[ getcwd ];
 
 use List::Util qw[ first ];
 use File::pushd;
 use Path::Tiny qw[ path cwd ];
+
+use Try::Tiny;
+
+use Log::Any '$log';
 
 our $VERSION = '1.6';
 
@@ -102,57 +108,78 @@ sub _read_config {
 
     my $file_p = path( $file );
 
-    # relative to current dir or parent
-    if ( ! defined $self->{attr}{dir} && $file =~ m|^[.]{1,2}/| ) {
 
-	$file_p = $cwd->child( $file );
+    # relative to current dir or parent
+    if ( !defined $self->{attr}{dir} && $file =~ m|^[.]{1,2}/| ) {
+
+        $file_p = $cwd->child( $file );
 
     }
-
 
     elsif ( $self->{attr}{path} && !$file_p->is_absolute ) {
 
-	for my $path ( @{ $self->{attr}{path} } ) {
+      SEARCH: {
+            $log->info( "Searching for configuration file $file_p" );
 
-	    $file_p = path( $path, $file );
-	    last if $file_p->is_file;
+            for my $path ( @{ $self->{attr}{path} } ) {
 
-	}
-	continue {
-	    undef $file_p;
-	}
+                $file_p = path( $path, $file );
+                last SEARCH if $file_p->is_file;
 
-	croak( "unable to find $file in ",
-	       join( ':', @{ $self->{attr}{path} } ), "\n" )
-	  unless defined $file_p;
+            }
 
-    }
-
-    my @lines = $file_p->lines( { chomp => 1 } );
-
-    my $line_idx = 1;
-    for my $line ( @lines ) {
-
-        # ignore comment lines or empty lines
-        next if $line =~ /^\s*\#|^\s*$/;
-
-        if ( $line =~ /^\s*%include\s+(.*)/ ) {
-
-            $self->_read_config( $1, $file_p->parent );
+            _log_fatal( 'Config::Wild::Error::exists', $file, "unable to find file in "
+			. join( ':', @{ $self->{attr}{path} } ) );
 
         }
 
-        else {
+    }
 
-            $self->_parsepair( $line )
-              or croak( $file_p->realpath->stringify,
-                ": can't parse line $line_idx" );
+    _log_fatal( 'Config::Wild::Error::exists', $file_p, 'unable to find file' )
+      unless $file_p->is_file;
+
+    $log->info( "Reading configuration file ", $file_p->absolute->canonpath )
+      if $log->is_info;
+
+    my @lines;
+
+    local $! = 0;
+    try {
+        @lines = $file_p->lines( { chomp => 1 } );
+    }
+    catch {
+	_log_fatal( 'Config::Wild::Error::read', $file_p, $_ );
+    };
+
+    try {
+
+        my $line_idx = 1;
+        for my $line ( @lines ) {
+
+            # ignore comment lines or empty lines
+            next if $line =~ /^\s*\#|^\s*$/;
+
+            if ( $line =~ /^\s*%include\s+(.*)/ ) {
+
+                $self->_read_config( $1, $file_p->parent );
+
+            }
+
+            else {
+
+                $self->_parsepair( $line )
+                  or die( "can't parse line $line_idx" );
+            }
+
+        }
+        continue {
+            ++$line_idx;
         }
 
     }
-    continue {
-        ++$line_idx;
-    }
+    catch {
+	_log_fatal( 'Config::Wild::Error::parse', $file_p, $_ );
+    };
 
 }
 
@@ -431,6 +458,20 @@ sub _parsepair {
 }
 
 
+sub _log_fatal {
+
+    my ( $package, $file, @err )  = @_;
+
+    $file = $file->absolute->canonpath if ref $file;
+
+    my $err = join( '', $file, ': ', @err );
+
+    $log->error( $err );
+    $package->throw( $err );
+
+}
+
+
 1;
 __END__
 
@@ -597,9 +638,9 @@ configuration file, e.g. the one with the C<%include> directive.
 
 =head1 METHODS
 
-=over
+=head2 Constructor
 
-=item B<new>
+=head3 new
 
   $cfg = Config::Wild->new( \%attr );
   $cfg = Config::Wild->new( $config_file, \%attr );
@@ -674,7 +715,7 @@ absolute keys.
 
 =back
 
-=item B<load>
+=head3 load
 
   $cfg->load( $file );
 
@@ -694,7 +735,7 @@ See L</Finding Configuration Files> for more information on how
 configuration files are found.
 
 
-=item B<load_cmd>
+=head3 load_cmd
 
   $cfg->load_cmd( \@ARGV );
   $cfg->load_cmd( \@ARGV,\%attr );
@@ -715,14 +756,14 @@ wildcards.
 
 It throws an exception (as a string) if an error ocurred.
 
-=item B<set>
+=head3 set
 
   $cfg->set( $key, $value );
 
 Explicitly set a key to a value.  Useful to specify keys that
 should be available before parsing the configuration file.
 
-=item B<get>
+=head3 get
 
   $value = $cfg->get( $key );
 
@@ -730,7 +771,7 @@ Return the value associated with a given key.  B<$key> is
 first matched against the absolute keys, then agains the
 wildcards.  If no match is made, C<undef> is returned.
 
-=item B<getbool>
+=head3 getbool
 
   $value = $cfg->getbool( $key );
 
@@ -740,7 +781,7 @@ then agains the wildcards.  If no match is made, or the value could
 not be converted to a truth value, C<undef> is returned.
 
 
-=item B<delete>
+=head3 delete
 
   $cfg->delete( $key );
 
@@ -749,7 +790,7 @@ stored in the object.  The key must be an exact match.  It is not
 an error to delete a key which doesn't exist.
 
 
-=item B<exists>
+=head3 exists
 
   $exists = $cfg->exists( $key );
 
@@ -757,26 +798,25 @@ Returns non-zero if the given key matches against the list of
 keys in the object, C<undef> if not.
 
 
-=item B<set_attr>
+=head3 set_attr
 
   $cfg->set_attr( \%attr );
 
 Set object attribute. See <L/METHODS/"new"> for a list of attributes.
 
-=back
+=head2 Keyword-named Accessors Methods
 
-There are also "hidden" methods which allow more natural access to
-keys.  You may access a key's value by specifying the key
-as the method, instead of using B<value>.  The following are
-equivalent:
+You may access a value by specifying the keyword as the method,
+instead of using the B<get()> method.  The following are equivalent:
 
-   $foo = $cfg->get( 'key' );
-   $foo = $cfg->key;
+   # keyword is foo
+   $foo = $cfg->get( 'foo' );
+   $foo = $cfg->foo;
 
-If C<key> doesn't exist, it returns C<undef>.
+If C<foo> doesn't exist, it returns C<undef>.
 
-Similarly, you can set a key's value using a similar syntax.  The
-following are equivalent, if the key already exists:
+You can set a value using a similar syntax.  The following are
+equivalent, if the key already exists:
 
    $cfg->set( 'key', $value );
    $cfg->key( $value );
@@ -784,11 +824,43 @@ following are equivalent, if the key already exists:
 If the key doesn't exist, the second statement does nothing.
 
 It is a bit more time consuming to use these methods rather than using
-B<set> and B<value>.
+B<set> and B<get>.
+
+=head1 LOGGING
+
+B<Config::Wild> uses L<Log::Any> to log C<info> level messages during
+searching and reading configuration files.  In the event of an error
+during searching, reading, and parsing files, it will log C<error>
+level messages.
+
+=head1 ERRORS AND EXCEPTIONS
+
+For most errors, B<Config::Wild> will croak.
+
+If an error ocurrs during searching for, reading, or parsing a
+configuration file, objects in the following classes will be thrown:
+
+=over
+
+=item *
+
+Config::Wild::Error::exists
+
+=item *
+
+Config::Wild::Error::read
+
+=item *
+
+Config::Wild::Error::parse
+
+=back
+
+They stringify into an appropriate error message.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 1998-2011 Smithsonian Astrophysical Observatory
+Copyright 1998-2015 Smithsonian Astrophysical Observatory
 
 This software is released under the GNU General Public License.  You
 may find a copy at

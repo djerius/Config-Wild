@@ -2,10 +2,14 @@
 
 on runtime => sub {
 
+    requires 'File::pushd';
     requires 'Lingua::Boolean::Tiny';
     requires 'List::Util' => 1.24;
-    requires 'File::pushd';
+    requires 'Log::Any';
     requires 'Path::Tiny';
+    requires 'Try::Tiny';
+    requires 'failures';
+    requires 'custom::failures';
 
 };
 
@@ -16,6 +20,8 @@ on test => sub {
     requires 'Path::Tiny';
     requires 'File::pushd';
     requires 'Test::TempDir::Tiny';
+    requires 'Log::Any';
+    requires 'Log::Any::Test';
 
 };
 
