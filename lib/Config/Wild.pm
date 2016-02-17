@@ -37,7 +37,7 @@ use Try::Tiny;
 
 use Log::Any '$log';
 
-our $VERSION = '1.6';
+our $VERSION = '2.0';
 
 
 sub new {
