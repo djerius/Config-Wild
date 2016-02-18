@@ -24,6 +24,8 @@ package Config::Wild;
 use strict;
 use warnings;
 
+our $VERSION = '2.01';
+
 use custom::failures __PACKAGE__ . '::Error' => [ 'exists', 'read', 'parse' ];
 
 use Carp;
@@ -36,7 +38,6 @@ use Try::Tiny;
 
 use Log::Any '$log';
 
-our $VERSION = '2.0';
 
 
 sub new {

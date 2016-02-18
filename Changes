@@ -1,5 +1,11 @@
 Revision history for Perl extension Config::Wild.
 
+2.01	2016-02-18T09:45:04-0500
+
+  [BUILD]
+
+    * specify minimal required version of Path::Tiny
+
 2.0	2016-02-16T17:23:01-0500
 
   * no changes since 1.6_01
