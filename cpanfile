@@ -6,7 +6,7 @@ on runtime => sub {
     requires 'Lingua::Boolean::Tiny';
     requires 'List::Util' => 1.24;
     requires 'Log::Any';
-    requires 'Path::Tiny';
+    requires 'Path::Tiny' => 0.018;
     requires 'Try::Tiny';
     requires 'failures';
     requires 'custom::failures';
@@ -17,7 +17,7 @@ on test => sub {
 
     requires 'Test::More';
     requires 'Test::Fatal';
-    requires 'Path::Tiny';
+    requires 'Path::Tiny' => 0.018;
     requires 'File::pushd';
     requires 'Test::TempDir::Tiny';
     requires 'Log::Any';

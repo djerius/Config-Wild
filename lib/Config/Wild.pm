@@ -27,7 +27,6 @@ use warnings;
 use custom::failures __PACKAGE__ . '::Error' => [ 'exists', 'read', 'parse' ];
 
 use Carp;
-use Cwd qw[ getcwd ];
 
 use List::Util qw[ first ];
 use File::pushd;
