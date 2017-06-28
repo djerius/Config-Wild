@@ -45,7 +45,7 @@ my %WriteMakefileArgs = (
     "blib" => "1.01",
     "namespace::clean" => 0
   },
-  "VERSION" => "2.01",
+  "VERSION" => "2.02",
   "test" => {
     "TESTS" => "t/*.t"
   }

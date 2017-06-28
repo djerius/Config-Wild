@@ -5,7 +5,7 @@ package Config::Wild;
 use strict;
 use warnings;
 
-our $VERSION = '2.01';
+our $VERSION = '2.02';
 
 use custom::failures __PACKAGE__ . '::Error' => [ 'exists', 'read', 'parse' ];
 
