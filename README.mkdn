@@ -4,7 +4,7 @@ Config::Wild - parse an application configuration file with wildcard keywords
 
 # VERSION
 
-version 2.02
+version 2.03
 
 # SYNOPSIS
 
