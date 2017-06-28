@@ -1,25 +1,6 @@
-# --8<--8<--8<--8<--
-#
-# Copyright (C) 1998-2015 Smithsonian Astrophysical Observatory
-#
-# This file is part of Config-Wild
-#
-# Config-Wild is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or (at
-# your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
-# -->8-->8-->8-->8--
-
 package Config::Wild;
+
+# ABSTRACT: parse an application configuration file with wildcard keywords
 
 use strict;
 use warnings;
@@ -38,7 +19,7 @@ use Try::Tiny;
 
 use Log::Any '$log';
 
-
+use namespace::clean;
 
 sub new {
     my $this = shift;
@@ -129,7 +110,7 @@ sub _read_config {
             }
 
             _log_fatal( 'Config::Wild::Error::exists', $file, "unable to find file in "
-			. join( ':', @{ $self->{attr}{path} } ) );
+                        . join( ':', @{ $self->{attr}{path} } ) );
 
         }
 
@@ -148,7 +129,7 @@ sub _read_config {
         @lines = $file_p->lines( { chomp => 1 } );
     }
     catch {
-	_log_fatal( 'Config::Wild::Error::read', $file_p, $_ );
+        _log_fatal( 'Config::Wild::Error::read', $file_p, $_ );
     };
 
     try {
@@ -178,7 +159,7 @@ sub _read_config {
 
     }
     catch {
-	_log_fatal( 'Config::Wild::Error::parse', $file_p, $_ );
+        _log_fatal( 'Config::Wild::Error::parse', $file_p, $_ );
     };
 
 }
@@ -395,35 +376,35 @@ sub _expand {
 
         # expand $(VAR) as a ConfigWild variable
         $value =~ s{\$\((\w+)\)} {
-	    my $var = $1;
-	    if ( defined $self->{abs}->{$var} ) {
+            my $var = $1;
+            if ( defined $self->{abs}->{$var} ) {
                  $self->{abs}->{$var};
             }
 
             elsif ( $self->{attr}{ExpandWild}
-		    && (my $kwd = first { $var =~ $_->[0] } @{ $self->{wild} } )
-		  ) {
+                    && (my $kwd = first { $var =~ $_->[0] } @{ $self->{wild} } )
+                  ) {
 
-		$kwd->[1];
+                $kwd->[1];
 
-	    }
+            }
 
-	    else {
+            else {
 
-		''
-	    }
+                ''
+            }
 
-	}gex
+        }gex
           and $stop = 0;
 
         # expand any unparenthesised/braced variables,
         # e.g. "$var", as ConfigWild vars or environment variables.
         # leave untouched if not
         $value =~ s{\$(\w+)} {
-	    defined $self->{abs}->{$1} ? $self->{abs}->{$1} :
-	      defined $ENV{$1} ? $ENV{$1} :
-		"\$$1"
-	    }gex
+            defined $self->{abs}->{$1} ? $self->{abs}->{$1} :
+              defined $ENV{$1} ? $ENV{$1} :
+                "\$$1"
+            }gex
           and $stop = 0;
     }
     # return the value
@@ -471,14 +452,12 @@ sub _log_fatal {
 
 }
 
-
 1;
+
+# COPYRIGHT
+
+
 __END__
-
-
-=head1 NAME
-
-Config::Wild - parse an application configuration file with wildcard keywords
 
 =head1 SYNOPSIS
 
@@ -509,7 +488,7 @@ Keys which contain regular expressions are termed I<wildcard>
 keys; those without are called I<absolute> keys.  Wildcard
 keys serve as templates to allow grouping of keys which have
 the same value.  For instance, say you've got a set of keys which
-normally have the same value, but where on occaision you'd like to
+normally have the same value, but where on occasion you'd like to
 override the default:
 
   p.{\d+}.foo = goo
@@ -652,7 +631,7 @@ See L</Finding Configuration Files> for more information on how
 configuration files are found.
 
 Additional attributes which modify the behavior of the object may be
-specified in the passed C<%attr> hash. They may also be specifed or modified after
+specified in the passed C<%attr> hash. They may also be specified or modified after
 object creation using the C<set_attr> method.
 
 The following attributes are available:
@@ -729,7 +708,7 @@ last-in first-out (LIFO) list, so that when the application requests a
 value, it will use search the wildcard keys in reverse order that
 they were specified.
 
-It throws an exception (as a string) if an error ocurred.
+It throws an exception (as a string) if an error occurred.
 
 See L</Finding Configuration Files> for more information on how
 configuration files are found.
@@ -754,7 +733,7 @@ wildcards.
 
 =back
 
-It throws an exception (as a string) if an error ocurred.
+It throws an exception (as a string) if an error occurred.
 
 =head3 set
 
@@ -768,17 +747,18 @@ should be available before parsing the configuration file.
   $value = $cfg->get( $key );
 
 Return the value associated with a given key.  B<$key> is
-first matched against the absolute keys, then agains the
+first matched against the absolute keys, then against the
 wildcards.  If no match is made, C<undef> is returned.
 
 =head3 getbool
 
   $value = $cfg->getbool( $key );
 
-Convert the value associated with a given key to a true or false
-value using B<L<Lingua::Boolean::Tiny>>.  B<$key> is first matched against the absolute keys,
-then agains the wildcards.  If no match is made, or the value could
-not be converted to a truth value, C<undef> is returned.
+Convert the value associated with a given key to a true or false value
+using B<L<Lingua::Boolean::Tiny>>.  B<$key> is first matched against
+the absolute keys, then against the wildcards.  If no match is made,
+or the value could not be converted to a truth value, C<undef> is
+returned.
 
 
 =head3 delete
@@ -837,7 +817,7 @@ level messages.
 
 For most errors, B<Config::Wild> will croak.
 
-If an error ocurrs during searching for, reading, or parsing a
+If an error occurs during searching for, reading, or parsing a
 configuration file, objects in the following classes will be thrown:
 
 =over
@@ -858,22 +838,3 @@ Config::Wild::Error::parse
 
 They stringify into an appropriate error message.
 
-=head1 COPYRIGHT & LICENSE
-
-Copyright 1998-2015 Smithsonian Astrophysical Observatory
-
-This software is released under the GNU General Public License.  You
-may find a copy at
-
-   http://www.fsf.org/copyleft/gpl.html
-
-
-=head1 SEE ALSO
-
-B<AppConfig>, an early version of which was the inspiration for this
-module.
-
-
-=head1 AUTHOR
-
-Diab Jerius, E<lt>djerius@cpan.orgE<gt>

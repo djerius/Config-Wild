@@ -1,4 +1,6 @@
-Revision history for Perl extension Config::Wild.
+Revision history for {{$dist->name}}
+
+{{$NEXT}}
 
 2.01	2016-02-18T09:45:04-0500
 

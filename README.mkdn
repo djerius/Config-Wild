@@ -1,0 +1,349 @@
+# NAME
+
+Config::Wild - parse an application configuration file with wildcard keywords
+
+# VERSION
+
+version 2.01
+
+# SYNOPSIS
+
+    use Config::Wild;
+    $cfg = Config::Wild->new();
+    $cfg = Config::Wild->new( $configfile, \%attr );
+
+# DESCRIPTION
+
+This module reads _key - value_ data pairs from a file.  What sets
+it apart from other configuration systems is that keys may contain
+Perl regular expressions, allowing one entry to match multiple
+requested keys.
+
+Configuration information in the file has the form
+
+    key = value
+
+where _key_ is a token which may contain Perl regular expressions
+surrounded by curly brackets, e.g.
+
+    foobar.{\d+}.name = goo
+
+and _value_ is the remainder of the line after any whitespace following
+the `=` character is removed.
+
+Keys which contain regular expressions are termed _wildcard_
+keys; those without are called _absolute_ keys.  Wildcard
+keys serve as templates to allow grouping of keys which have
+the same value.  For instance, say you've got a set of keys which
+normally have the same value, but where on occasion you'd like to
+override the default:
+
+    p.{\d+}.foo = goo
+    p.99.foo = flabber
+
+_value_ may reference environment variables or other **Config::Wild**
+variables via the following expressions:
+
+- Environment variables may be accessed via `${var}`:
+
+        foo = ${HOME}/foo
+
+    If the variable doesn't exist, the expression is replaced with
+    an empty string.
+
+- Other **Config::Wild** variables may be accessed via `$(var)`.
+
+        root = ${HOME}
+        foo = $(root)/foo
+
+    If the variable doesn't exist, the expression is replaced with
+    an empty string.  Variable expansions can be nested, as in
+
+        root = /root
+        branch = $(root)/branch
+        tree = $(branch)/tree
+
+    `tree` will evaluate to `/root/branch/tree`.
+
+- _Either_ type of variable may be accessed via `$var`.
+In this case, if _var_ is not a **Config::Wild** variable, it is
+assumed to be an environment variable.
+If the variable doesn't exist, the expression is left as is.
+
+Substitutions are made when the **value** method is called, not when
+the values are first read in.
+
+Lines which begin with the `#` character are ignored.  There is also a
+set of directives which alter where and how **Config::Wild** reads
+configuration information.  Each directive begins with the `%` character
+and appears alone on a line in the config file:
+
+- **%include** `path`
+
+    Temporarily interrupt parsing of the current configuration file, and
+    switch the input stream to the file specified via _path_.
+    See ["Finding Configuration Files"](#finding-configuration-files).
+
+## Finding Configuration Files
+
+The `dir` and `path` options to the constructor determine where
+configuration files are searched for.  They are optional and may not be
+specified in combination.
+
+In the following tables:
+
+- `file` is the provided path to the configuration file.
+- `option = default` indicates that neither `dir` nor `path`
+has been specified.
+- The file patterns are,
+
+        /*         absolute path
+        ./* ../*   paths relative to the current directory
+        *          all other paths
+
+- In the results,
+
+        cwd        the current working directory
+        path       an entry in the path option array
+
+### Files loaded via **new** and **load**
+
+    +==========================================+
+    |         |            file                |
+    |---------+--------------------------------|
+    | option  |  /*  |  ./* ../*   |  *        |
+    |==========================================|
+    | default | file | cwd/file    | cwd/file  |
+    | path    | file | cwd/file    | path/file |
+    | dir     | file | dir/file    | dir/file  |
+    +---------+------+-------------+-----------+
+
+### Files included from other files
+
+`incdir` is the directory containing the file including the new
+configuration file, e.g. the one with the `%include` directive.
+
+    +==========================================+
+    |         |            file                |
+    |---------+--------------------------------|
+    | option  |  /*  |  ./* ../*   |  *        |
+    |==========================================|
+    | default | file | incdir/file | cwd/file  |
+    | path    | file | incdir/file | path/file |
+    | dir     | file | dir/file    | dir/file  |
+    +---------+------+-------------+-----------+
+
+# METHODS
+
+## Constructor
+
+### new
+
+    $cfg = Config::Wild->new( \%attr );
+    $cfg = Config::Wild->new( $config_file, \%attr );
+
+Create a new **Config::Wild** object, optionally loading configuration
+information from a file.
+
+See ["Finding Configuration Files"](#finding-configuration-files) for more information on how
+configuration files are found.
+
+Additional attributes which modify the behavior of the object may be
+specified in the passed `%attr` hash. They may also be specified or modified after
+object creation using the `set_attr` method.
+
+The following attributes are available:
+
+- `UNDEF` _subroutine reference_
+
+    This specifies a subroutine to be called when the value of an undefined
+    key is requested.  The subroutine is passed the name of the key.
+    It should return a value, which will be returned as the value of the
+    key.
+
+    For example,
+
+        $cfg = Config::Wild->new( "foo.cnf", { UNDEF => \&undefined_key } );
+
+        sub undefined_key
+        {
+          my $key = shift;
+          return 33;
+        }
+
+    You may also use this to centralize error messages:
+
+        sub undefined_key
+        {
+          my $key = shift;
+          die("undefined key requested: $key\n");
+        }
+
+    To reset this to the default behavior, set `UNDEF` to `undef`:
+
+        $cfg->set_attr( UNDEF => undef );
+
+- `dir` `directory`
+
+    If specified, the current working directory will be changed to the
+    specified directory before a configuration file is loaded.
+
+    See ["Finding Configuration Files"](#finding-configuration-files).
+
+    This option may not be combined with the `path` option.
+
+- `path` _paths_
+
+    An array of paths to search for configuration files.
+
+    See ["Finding Configuration Files"](#finding-configuration-files).
+
+    This option may not be combined with the `dir` option.
+
+- `ExpandWild` _boolean_
+
+    If set, when expanding `$(var)` in key values, `var` will be
+    matched first against absolute keys, then against wildcard
+    keys.  If not set (the default), `var` is matched only against the
+    absolute keys.
+
+### load
+
+    $cfg->load( $file );
+
+Load information from a configuration file into the current object.
+New configuration values will supersede previous ones, in the
+following complicated fashion.  Absolutely specified keys will
+overwrite previously absolutely specified values.  Since it is
+difficult to determine whether the set of keys matched by two
+regular expressions overlap, wildcard keys are pushed onto a
+last-in first-out (LIFO) list, so that when the application requests a
+value, it will use search the wildcard keys in reverse order that
+they were specified.
+
+It throws an exception (as a string) if an error occurred.
+
+See ["Finding Configuration Files"](#finding-configuration-files) for more information on how
+configuration files are found.
+
+### load\_cmd
+
+    $cfg->load_cmd( \@ARGV );
+    $cfg->load_cmd( \@ARGV,\%attr );
+
+Parse an array of key-value pairs (possibly command line
+arguments), and insert them into the list of keys.  It can take an
+optional hash of attributes with the following values:
+
+- `Exists`
+
+    If true, the keys must already exist. An error will be returned if
+    the key isn't in the absolute list, or doesn't match against the
+    wildcards.
+
+It throws an exception (as a string) if an error occurred.
+
+### set
+
+    $cfg->set( $key, $value );
+
+Explicitly set a key to a value.  Useful to specify keys that
+should be available before parsing the configuration file.
+
+### get
+
+    $value = $cfg->get( $key );
+
+Return the value associated with a given key.  **$key** is
+first matched against the absolute keys, then against the
+wildcards.  If no match is made, `undef` is returned.
+
+### getbool
+
+    $value = $cfg->getbool( $key );
+
+Convert the value associated with a given key to a true or false value
+using **[Lingua::Boolean::Tiny](https://metacpan.org/pod/Lingua::Boolean::Tiny)**.  **$key** is first matched against
+the absolute keys, then against the wildcards.  If no match is made,
+or the value could not be converted to a truth value, `undef` is
+returned.
+
+### delete
+
+    $cfg->delete( $key );
+
+Delete `$key` from the list of keys (either absolute or wild)
+stored in the object.  The key must be an exact match.  It is not
+an error to delete a key which doesn't exist.
+
+### exists
+
+    $exists = $cfg->exists( $key );
+
+Returns non-zero if the given key matches against the list of
+keys in the object, `undef` if not.
+
+### set\_attr
+
+    $cfg->set_attr( \%attr );
+
+Set object attribute. See <L/METHODS/"new"> for a list of attributes.
+
+## Keyword-named Accessors Methods
+
+You may access a value by specifying the keyword as the method,
+instead of using the **get()** method.  The following are equivalent:
+
+    # keyword is foo
+    $foo = $cfg->get( 'foo' );
+    $foo = $cfg->foo;
+
+If `foo` doesn't exist, it returns `undef`.
+
+You can set a value using a similar syntax.  The following are
+equivalent, if the key already exists:
+
+    $cfg->set( 'key', $value );
+    $cfg->key( $value );
+
+If the key doesn't exist, the second statement does nothing.
+
+It is a bit more time consuming to use these methods rather than using
+**set** and **get**.
+
+# LOGGING
+
+**Config::Wild** uses [Log::Any](https://metacpan.org/pod/Log::Any) to log `info` level messages during
+searching and reading configuration files.  In the event of an error
+during searching, reading, and parsing files, it will log `error`
+level messages.
+
+# ERRORS AND EXCEPTIONS
+
+For most errors, **Config::Wild** will croak.
+
+If an error occurs during searching for, reading, or parsing a
+configuration file, objects in the following classes will be thrown:
+
+- Config::Wild::Error::exists
+- Config::Wild::Error::read
+- Config::Wild::Error::parse
+
+They stringify into an appropriate error message.
+
+# BUGS AND LIMITATIONS
+
+You can make new bug reports, and view existing ones, through the
+web interface at [https://rt.cpan.org/Public/Dist/Display.html?Name=Config-Wild](https://rt.cpan.org/Public/Dist/Display.html?Name=Config-Wild).
+
+# AUTHOR
+
+Diab Jerius <djerius@cpan.org>
+
+# COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2017 by Smithsonian Astrophysical Observatory.
+
+This is free software, licensed under:
+
+    The GNU General Public License, Version 3, June 2007
